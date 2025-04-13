@@ -20,72 +20,79 @@ namespace Islamic_app
 {
     public partial class frmTime : Form
     {
-        design design = new design();
+       
+
+        private readonly design design = new design();
+        private TimeSpan remainingTime;
+        private int Hours, Minutes, Seconds;
+        private string[] TimeOfPrays;
+        private DateTime[] Prays = new DateTime[6];
+        private readonly WindowsMediaPlayer WMP = new WindowsMediaPlayer();
         public frmTime()
         {
             InitializeComponent();
+            InitializeForm();
+            GetPraysTime();
+            InitializeTimer();
+        }
+
+        private void InitializeTimer()
+        {
+            timer1.Interval = 1000;
+            timer1.Tick += timer1_Tick;
+            timer1.Start();
+        }
+
+        private void InitializeForm()
+        {
             design.CustomizeForm(this);
             design.ApplyTheme(lblTime, lblAzkar, lblquran, lblMain, this);
-            GetPraysTime();
 
+            // Initialize media player
+            WMP.settings.volume = 80;
+            notifyIcon1.BalloonTipTitle = "موعد الأذان";
         }
 
-        TimeSpan remainingTime;
-        int Hours,Minutes,Seconds;      
-        string[] TimeOfPrays;
-        DateTime[] Prays = new DateTime[6];
-        
 
-        WindowsMediaPlayer WMP = new WindowsMediaPlayer();
-       
+
         private void TimeForPrayNotify()
         {
-            
-                WMP.URL = "038.mp3.mp3";
-                WMP.controls.play();
-          
-           
-
-            if (lblNextPray.Tag.ToString() == "1")
+            try
             {
+                string soundFile = FileManager.GetResourcePath("Sounds", "Azan.mp3");
+                if (File.Exists(soundFile))
+                {
+                    WMP.URL = soundFile;
+                    WMP.controls.play();
+                }
 
-                notifyIcon1.ShowBalloonTip(5000, "موعد الاذان", "حان الأن موعد صلاة الظهر", ToolTipIcon.Info);
-
+                string prayerName = GetPrayerNameFromTag();
+                notifyIcon1.ShowBalloonTip(5000, "موعد الأذان", $"حان الآن موعد صلاة {prayerName}", ToolTipIcon.Info);
             }
-            else if(lblNextPray.Tag.ToString() == "2")
+            catch (Exception ex)
             {
-                
-                notifyIcon1.ShowBalloonTip(5000, "موعد الاذان", "حان الأن موعد صلاة العصر", ToolTipIcon.Info);
+                MessageBox.Show($"Error in prayer notification: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
-            else if (lblNextPray.Tag.ToString() == "3")
-            {
-              
-                notifyIcon1.ShowBalloonTip(5000, "موعد الاذان", "حان الأن موعد صلاة المغرب", ToolTipIcon.Info);
-            }
-            else if (lblNextPray.Tag.ToString() == "4")
-            {
-               
-                notifyIcon1.ShowBalloonTip(5000, "موعد الاذان", "حان الأن موعد صلاة العشاء", ToolTipIcon.Info);
-            }
-            else
-            {
-                
-                notifyIcon1.ShowBalloonTip(5000, "موعد الاذان", "حان الأن موعد صلاة الفجر", ToolTipIcon.Info);
-
-            }
-
-            
-            
-
         }
 
+        private string GetPrayerNameFromTag()
+        {
+            switch (lblNextPray.Tag.ToString())
+            {
+                case "1": return "الظهر";
+                case "2": return "العصر";
+                case "3": return "المغرب";
+                case "4": return "العشاء";
+                default: return "الفجر";
+            }
+        }
         private TimeSpan GetTimeDifference(DateTime targetTime, DateTime currentTime)
         {
-             if (lblNextPray.Tag.ToString() == "1")
+            if (lblNextPray.Tag.ToString() == "1")
             {
                 targetTime = targetTime.AddDays(1);
             }
-                return targetTime - currentTime;
+            return targetTime - currentTime;
         }
 
 
@@ -96,68 +103,67 @@ namespace Islamic_app
                 if (currentTime < prayerTimes[i])
                 {
                     string[] prayerNames = { "الفجر", "الظهر", "العصر", "المغرب", "العشاء" };
-                    lblNext.Text = $"{prayerNames[i]}:";
-                    lblNextPray.Text = prayerNames[i];
-                    lblNextPray.Tag = (i).ToString();
-
-                    // Update timer variables
-                    Hours = prayerTimes[i].Hour;
-                    Minutes = prayerTimes[i].Minute;
-                    Seconds = prayerTimes[i].Second;
+                    UpdatePrayerUI(prayerNames[i], i, prayerTimes[i]);
                     return;
                 }
             }
 
-            // If no prayers are left today, set the next day's Fajr
-            lblNext.Text = "الفجر :";
-            lblNextPray.Text = "الفجر";
-            lblNextPray.Tag = "1";
+            // If no prayers left today, set to next day's Fajr
+            UpdatePrayerUI("الفجر", 0, prayerTimes[0].AddDays(1));
+        }
 
-            // Set timer to next day's Fajr
-            Hours = prayerTimes[0].Hour;
-            Minutes = prayerTimes[0].Minute;
-            Seconds = prayerTimes[0].Second;
-            
+        private void UpdatePrayerUI(string prayerName, int index, DateTime prayerTime)
+        {
+            lblNext.Text = $"{prayerName}:";
+            lblNextPray.Text = prayerName;
+            lblNextPray.Tag = index.ToString();
+
+            Hours = prayerTime.Hour;
+            Minutes = prayerTime.Minute;
+            Seconds = prayerTime.Second;
         }
 
         private void GetPraysTime()
         {
-            PrayTime prayTime = new PrayTime();
-
-            prayTime.setCalcMethod(5);
-            prayTime.setAsrMethod(0);
-
-            double CityLat = 30.9852;
-            double CityLong = 31.2155;
-
-            var dt = DateTime.Now;
-            var tz = TimeZone.CurrentTimeZone.GetUtcOffset(dt).Hours;
-
-            TimeOfPrays = prayTime.getDatePrayerTimes(dt.Year, dt.Month, dt.Day, CityLat, CityLong, tz);
-
-            lblfagr.Text = TimeOfPrays[0];
-            lblSunRise.Text = TimeOfPrays[1];
-            lblDhur.Text = TimeOfPrays[2];
-            lblAsr.Text = TimeOfPrays[3];
-            lblMaghrub.Text = TimeOfPrays[4];
-            lblIsha.Text = TimeOfPrays[6];
-
-            
-            Prays[0] = DateTime.Parse(TimeOfPrays[0]); // Fajr
-            for (int i = 1; i < 4; i++)
+            try
             {
-                Prays[i] = DateTime.Parse(TimeOfPrays[i + 1]); // Dhur, Asr, Maghrib
+                PrayTime prayTime = new PrayTime();
+                prayTime.setCalcMethod(5);
+                prayTime.setAsrMethod(0);
+
+                double CityLat = 30.9852;  // Default coordinates (can be made configurable)
+                double CityLong = 31.2155;
+                var dt = DateTime.Now;
+                var tz = TimeZone.CurrentTimeZone.GetUtcOffset(dt).Hours;
+
+                TimeOfPrays = prayTime.getDatePrayerTimes(dt.Year, dt.Month, dt.Day, CityLat, CityLong, tz);
+
+                // Update UI with prayer times
+                lblfagr.Text = TimeOfPrays[0];
+                lblSunRise.Text = TimeOfPrays[1];
+                lblDhur.Text = TimeOfPrays[2];
+                lblAsr.Text = TimeOfPrays[3];
+                lblMaghrub.Text = TimeOfPrays[4];
+                lblIsha.Text = TimeOfPrays[6];
+
+                // Store prayer times for calculations
+                Prays[0] = DateTime.Parse(TimeOfPrays[0]); // Fajr
+                for (int i = 1; i < 4; i++)
+                {
+                    Prays[i] = DateTime.Parse(TimeOfPrays[i + 1]); // Dhur, Asr, Maghrib
+                }
+                Prays[4] = DateTime.Parse(TimeOfPrays[6]); // Isha
+
+                GetNextPrayName(Prays, dt);
             }
-            Prays[4] = DateTime.Parse(TimeOfPrays[6]); // Isha
-
-            GetNextPrayName(Prays, dt);
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error calculating prayer times: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
         }
 
-
-        private void btnExit_Click(object sender, EventArgs e)
-        {
-            Application.Exit();
-        }
+        private void btnExit_Click(object sender, EventArgs e) => Application.Exit();
+        
 
         private void lblMain_Click(object sender, EventArgs e)
         {
@@ -178,10 +184,7 @@ namespace Islamic_app
 
         }
 
-        private void notifyIcon1_BalloonTipClicked(object sender, EventArgs e)
-        {
-            WMP.controls.stop();
-        }
+        private void notifyIcon1_BalloonTipClicked(object sender, EventArgs e) => WMP.controls.stop();
 
         private void lblAzkar_Click(object sender, EventArgs e)
         {
@@ -200,32 +203,40 @@ namespace Islamic_app
         private void timer1_Tick(object sender, EventArgs e)
         {
             DateTime now = DateTime.Now;
-                         
             remainingTime = GetTimeDifference(new DateTime(now.Year, now.Month, now.Day, Hours, Minutes, Seconds), now);
-            
 
-            // If prayer time is reached
             if (remainingTime.TotalSeconds <= 1)
             {
-                TimeForPrayNotify(); // Notify about the prayer
-                GetNextPrayName(Prays, now); // Refresh prayer times and update target time
-
+                TimeForPrayNotify();
+                GetNextPrayName(Prays, now);
                 remainingTime = GetTimeDifference(new DateTime(now.Year, now.Month, now.Day, Hours, Minutes, Seconds), now);
-
             }
 
-            // Update countdown display
-            lblClockNow.Text = now.ToString("hh:mm:ss tt");
-            lblRemaining.Text = $"{remainingTime.Hours}:{remainingTime.Minutes}:{remainingTime.Seconds}";
+            UpdateClockDisplay(now);
         }
 
 
+        private void UpdateClockDisplay(DateTime now)
+        {
+            lblClockNow.Text = now.ToString("hh:mm:ss tt");
+            lblRemaining.Text = $"{remainingTime.Hours:D2}:{remainingTime.Minutes:D2}:{remainingTime.Seconds:D2}";
+        }
+
         private void TimeForm_Paint(object sender, PaintEventArgs e)
         {
-            Pen pen = new Pen(Color.Black, 2);
-            pen.StartCap = LineCap.RoundAnchor;
-            pen.EndCap = LineCap.RoundAnchor;
-            e.Graphics.DrawLine(pen, 0, 250, this.Width, 250);
+            using (Pen pen = new Pen(Color.Black, 2))
+            {
+                pen.StartCap = LineCap.RoundAnchor;
+                pen.EndCap = LineCap.RoundAnchor;
+                e.Graphics.DrawLine(pen, 0, 250, this.Width, 250);
+            }
+        }
+
+        protected override void OnFormClosing(FormClosingEventArgs e)
+        {
+            base.OnFormClosing(e);
+            WMP.controls.stop();
+            WMP.close();
         }
     }
 }

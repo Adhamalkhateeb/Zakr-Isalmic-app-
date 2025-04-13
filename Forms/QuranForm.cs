@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Diagnostics.Eventing.Reader;
 using System.Drawing;
 using System.IO;
+using System.Linq;
 using System.Media;
 using System.Windows.Forms;
 using WMPLib;
@@ -14,20 +15,10 @@ namespace QuranPlayer
     public partial class QuranForm : Form
     {
         private static QuranForm _instance;
-        public static QuranForm Instance
-        {
-            get
-            {
-                if (_instance == null || _instance.IsDisposed)
-                {
-                    _instance = new QuranForm();
-                }
-                return _instance;
-            }
-        }
+        public static QuranForm Instance => _instance ?? (_instance = new QuranForm());
+
 
         design design = new design();
-
         string[][] QuranSurahsNames = new string[30][];
         private string[] QuranFiles;
         WindowsMediaPlayer wmp = new WindowsMediaPlayer();
@@ -39,19 +30,37 @@ namespace QuranPlayer
             InitializeComponent();
             design.ApplyTheme(lblquran, lblAzkar, lblMain, lblTime, this);
             design.CustomizeForm(this);
+
+            FileManager.ExtractEmbeddedResources();
+
             LoadSurahToComboBox();
-            loadQuranFilesMsharyRashed();
+            LoadQuranFiles();
 
             wmp.controls.stop();
-             
+            
+
         }
 
-        private void loadQuranFilesMsharyRashed()
+        private void LoadQuranFiles()
         {
-            string DirectoryPath = Path.Combine(Application.StartupPath, "Surahs");
-            QuranFiles = Directory.GetFiles(DirectoryPath,"*.mp3");
+            try
+            {
+                string directoryPath = Path.Combine(FileManager.AppPath, "Surahs");
+                QuranFiles = Directory.GetFiles(directoryPath, "*.mp3").OrderBy(f => f).ToArray();
 
+                if (QuranFiles.Length == 0)
+                {
+                    MessageBox.Show("No Quran files found in the Surahs directory.",
+                                  "Warning", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error loading Quran files: {ex.Message}",
+                              "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
         }
+
         private void LoadSurahToComboBox()
         {
             QuranSurahsNames[0] = new string[] { " الفَاتِحَة ", " البَقَرَة " };
@@ -91,6 +100,13 @@ namespace QuranPlayer
              " الهُمَزَة " , " الفِيل " , " قـُرَيْش " ,  " المَاعُون " , " الكَوْثَر " , " الكَافِرُون " , " النـَّصر " , " المَسَد " , " الإخْلَاص ", " الفَلَق ",
              " النَّاس "};
 
+
+            for (int i = 0; i < 30; i++)
+            {
+                cmbPart.Items.Add($"الجزء {i + 1}");
+            }
+
+            cmbPart.SelectedIndex = 0;
         }
         private void btnExit_Click(object sender, EventArgs e)
         {
@@ -132,109 +148,93 @@ namespace QuranPlayer
             }
         }
 
-  
+
 
         private int GetSurahFileNumber(int partIndex, int surahIndexInPart)
         {
-           
             startingFileNumber = 1;
- 
-            // Iterate through previous parts to find the starting file number
+
             for (int i = 0; i < partIndex; i++)
             {
-
                 startingFileNumber += QuranSurahsNames[i].Length;
             }
 
             startingFileNumber += surahIndexInPart;
-
             return startingFileNumber;
         }
 
-        private void PlaySurah(string filePath)
+        private void PlaySurah(string fileName)
         {
             try
             {
+                string filePath = FileManager.GetResourcePath("Surahs", fileName);
+
+                if (!File.Exists(filePath))
+                {
+                    MessageBox.Show($"Surah file not found: {filePath}",
+                                  "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
+                }
 
                 wmp.controls.stop();
-
-                // Load and play the new file
                 wmp.URL = filePath;
                 wmp.controls.play();
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error playing Surah: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show($"Error playing Surah: {ex.Message}",
+                              "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
         private void btnPlay_Click_1(object sender, EventArgs e)
         {
 
+
             if (btnPlay.Tag.ToString() == "2")
             {
                 wmp.controls.pause();
                 btnPlay.BackgroundImage = Resources.square_play_button;
                 btnPlay.Tag = "1";
+                return;
             }
-            else
+
+            int partIndex = cmbPart.SelectedIndex;
+            string selectedSurah = cmbSurah.SelectedItem?.ToString();
+
+            if (wmp.playState == WMPPlayState.wmppsPaused && selectedSurah == ActiveSurah)
             {
-
-              
-                int partIndex = cmbPart.SelectedIndex;
-
-                string selectedSurah = cmbSurah.SelectedItem?.ToString();
-
-                if (wmp.playState == WMPPlayState.wmppsPaused && selectedSurah == ActiveSurah)
-                {
-                    wmp.controls.play();
-                    btnPlay.BackgroundImage = Resources.pause_button;
-                    btnPlay.Tag = "2";
-                    return;
-                }
-
-                if (!string.IsNullOrEmpty(selectedSurah))
-                {
-                    cmbReader.SelectedIndex =0;
-                    btnPlay.BackgroundImage = Resources.pause_button;
-                    btnPlay.Tag = "2";
-
-                    int surahIndexInPart = Array.IndexOf(QuranSurahsNames[partIndex], selectedSurah);
-
-                    if (surahIndexInPart >= 0)
-                    {
-
-                        int fileNumber = GetSurahFileNumber(partIndex, surahIndexInPart);
-
-                        // Construct the file name based on the file number
-                        string fileName = $"{fileNumber:D3}.mp3"; // Formats number as 001, 002, etc.
-
-                        // Construct the full file path
-                        string filePath = Path.Combine(Application.StartupPath, "Surahs", fileName);
-
-                        ActiveSurah = selectedSurah;
-
-                        // Play the MP3 file using WMP
-                        PlaySurah(filePath);
-
-                       
-                    }
-               
-                }
-                else
-                {
-                    MessageBox.Show("رجائا اختر السورة اولا ", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                }
+                wmp.controls.play();
+                btnPlay.BackgroundImage = Resources.pause_button;
+                btnPlay.Tag = "2";
+                return;
             }
+
+            if (string.IsNullOrEmpty(selectedSurah))
+            {
+                MessageBox.Show("رجائا اختر السورة اولا ", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+
+            cmbReader.SelectedIndex = 0;
+            btnPlay.BackgroundImage = Resources.pause_button;
+            btnPlay.Tag = "2";
+
+            int surahIndexInPart = Array.IndexOf(QuranSurahsNames[partIndex], selectedSurah);
+            if (surahIndexInPart < 0) return;
+
+            int fileNumber = GetSurahFileNumber(partIndex, surahIndexInPart);
+            string fileName = $"{fileNumber:D3}.mp3";
+            ActiveSurah = selectedSurah;
+            PlaySurah(fileName);
         }
 
         private void btnNext_Click(object sender, EventArgs e)
         {
-            if (startingFileNumber < 135 )
+            if (startingFileNumber < 135)
             {
+                cmbReader.SelectedIndex = 0;
 
-                
-                cmbReader.SelectedIndex =0;
                 if (startingFileNumber == 0)
                 {
                     cmbPart.SelectedIndex = 0;
@@ -244,59 +244,50 @@ namespace QuranPlayer
                 {
                     if (cmbSurah.SelectedIndex == cmbSurah.Items.Count - 1)
                     {
-                        cmbPart.SelectedIndex = cmbPart.SelectedIndex + 1;
+                        cmbPart.SelectedIndex++;
                         cmbSurah.SelectedIndex = 0;
                     }
                     else
                     {
-                        cmbSurah.SelectedIndex = cmbSurah.SelectedIndex + 1;
+                        cmbSurah.SelectedIndex++;
                     }
                 }
+
                 ActiveSurah = cmbSurah.SelectedItem.ToString();
+                string fileName = $"{startingFileNumber += 1:D3}.mp3";
+                PlaySurah(fileName);
 
                 if (btnPlay.Tag.ToString() == "1")
                 {
                     btnPlay.Tag = "2";
                     btnPlay.BackgroundImage = Resources.pause_button;
                 }
-                string fileName = $"{startingFileNumber += 1:D3}.mp3"; // Formats number as 001, 002, etc.
-
-               
-
-                string filePath = Path.Combine(Application.StartupPath, "Surahs", fileName);
-                PlaySurah(filePath);
-
-               
-                   
             }
             else
             {
-                MessageBox.Show("انت في أخر سورة من القرآن الكريم لا يمكن تشغيل التالي اختر سورة اخري للاستماع","Error",MessageBoxButtons.OK,MessageBoxIcon.Error);
+                MessageBox.Show("انت في أخر سورة من القرآن الكريم لا يمكن تشغيل التالي اختر سورة اخري للاستماع",
+                    "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
         private void btnPrev_Click(object sender, EventArgs e)
         {
-            
+
             if (startingFileNumber > 1)
             {
-         
-                
                 if (cmbSurah.SelectedIndex == 0)
                 {
-                    cmbPart.SelectedIndex = cmbPart.SelectedIndex - 1;
-                    cmbSurah.SelectedIndex = 0;
+                    cmbPart.SelectedIndex--;
+                    cmbSurah.SelectedIndex = cmbSurah.Items.Count - 1;
                 }
                 else
                 {
-                    cmbSurah.SelectedIndex = cmbSurah.SelectedIndex - 1;
+                    cmbSurah.SelectedIndex--;
                 }
 
                 ActiveSurah = cmbSurah.SelectedItem.ToString();
-                string fileName = $"{startingFileNumber -= 1:D3}.mp3"; // Formats number as 001, 002, etc.
-
-                string filePath = Path.Combine(Application.StartupPath, "Surahs", fileName);
-                PlaySurah(filePath);
+                string fileName = $"{startingFileNumber -= 1:D3}.mp3";
+                PlaySurah(fileName);
             }
             else
             {
@@ -305,7 +296,8 @@ namespace QuranPlayer
                     MessageBox.Show("اختر السورة اولا", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
                     return;
                 }
-                MessageBox.Show("انها السورة الاولي بالقرآن الكريم لا يوجد شيء قبلها اختر سورة اخري للاستماع", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show("انها السورة الاولي بالقرآن الكريم لا يوجد شيء قبلها اختر سورة اخري للاستماع",
+                    "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
@@ -321,7 +313,7 @@ namespace QuranPlayer
 
         private void SurahTimer_Tick(object sender, EventArgs e)
         {
-            if(wmp.playState == WMPPlayState.wmppsPlaying)
+            if (wmp.playState == WMPPlayState.wmppsPlaying)
             {
                 ProbarSurah.Maximum = (int)wmp.controls.currentItem.duration;
                 ProbarSurah.Value = (int)wmp.controls.currentPosition;
@@ -333,7 +325,7 @@ namespace QuranPlayer
 
         private void btnSound_Click(object sender, EventArgs e)
         {
-            if(btnSound.Tag.ToString() == "1")
+            if (btnSound.Tag.ToString() == "1")
             {
                 btnSound.BackgroundImage = Resources.mute;
                 btnSound.Tag = "2";

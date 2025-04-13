@@ -19,38 +19,39 @@ namespace Islamic_app
     public partial class AzkarForm : Form
     {
         design design = new design();
+        string[] Ahadis;
         public AzkarForm()
         {
             InitializeComponent();
             design.ApplyTheme(lblAzkar, lblMain, lblquran, lblTime,this);
             design.CustomizeForm(this);
-         
+
+            try
+            {
+                Ahadis = FileManager.ReadAllLines("ahdis.txt");
+            }
+            catch (Exception ex)
+            {
+                txtAhadis.Text = $"Error loading Ahadis: {ex.Message}";
+                Ahadis = Array.Empty<string>();
+            }
         }
 
 
 
-        string[] Ahadis = File.ReadAllLines("ahdis.txt");
-
+       
         private void frmAzkar_Load(object sender, EventArgs e)
         {
             try
             {
-               
-
-                // Check if the file has content
                 if (Ahadis.Length == 0)
                 {
                     txtAhadis.Text = "No Ahadis found in the file.";
                     return;
                 }
 
-                // Pick a random line
                 Random rnd = new Random();
                 txtAhadis.Text = Ahadis[rnd.Next(0, Ahadis.Length)];
-            }
-            catch (FileNotFoundException)
-            {
-                txtAhadis.Text = "The file 'ahdis.txt' was not found.";
             }
             catch (Exception ex)
             {
